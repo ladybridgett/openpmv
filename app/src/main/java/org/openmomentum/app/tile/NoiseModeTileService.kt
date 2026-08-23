@@ -55,6 +55,7 @@ class NoiseModeTileService : TileService() {
             }
             label = when {
                 headphones.error != null -> "Momentum unavailable"
+                !headphones.reachable -> "Momentum disconnected"
                 else -> headphones.noiseMode.displayName
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
