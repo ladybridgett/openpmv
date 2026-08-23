@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import org.openmomentum.app.bluetooth.MomentumClient
+import org.openmomentum.app.integration.IntegrationUpdater
 import org.openmomentum.app.model.HeadphoneState
 import org.openmomentum.app.state.MomentumPreferences
 import java.util.concurrent.ExecutorService
@@ -26,6 +27,16 @@ class MomentumRepository private constructor(context: Context) {
     fun turnOff(callback: (HeadphoneState) -> Unit = {}) =
         runOperation(client::turnNoiseControlOff, callback)
 
+    fun markDisconnected() {
+        val state = preferences.load().copy(
+            reachable = false,
+            updatedAtMillis = System.currentTimeMillis(),
+            error = null,
+        )
+        preferences.save(state)
+        mainHandler.post { IntegrationUpdater.publish(appContext, state) }
+    }
+
     private fun runOperation(
         operation: () -> HeadphoneState,
         callback: (HeadphoneState) -> Unit,
@@ -42,7 +53,10 @@ class MomentumRepository private constructor(context: Context) {
                 )
             }
             preferences.save(state)
-            mainHandler.post { callback(state) }
+            mainHandler.post {
+                IntegrationUpdater.publish(appContext, state)
+                callback(state)
+            }
         }
     }
 
