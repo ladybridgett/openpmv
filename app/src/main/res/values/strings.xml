@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenMomentum</string>
+    <string name="tile_name">Momentum noise control</string>
+    <string name="widget_description">Momentum 4 battery and noise controls</string>
+</resources>

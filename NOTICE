@@ -1,0 +1,9 @@
+OpenMomentum includes an independent Kotlin port of MOMENTUM 4 GAIA protocol
+behavior documented by the M4 Companion project:
+
+    https://github.com/Zhengyang-Liu/m4-companion
+
+M4 Companion is Copyright (c) its contributors and licensed under the MIT
+License. OpenMomentum retains this notice in accordance with that license.
+
+Sennheiser and MOMENTUM are trademarks of their respective owners.
