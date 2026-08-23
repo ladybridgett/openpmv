@@ -2,7 +2,7 @@
 
 OpenMomentum is an unofficial, open-source Android controller for the Sennheiser MOMENTUM 4 Wireless.
 
-The first milestone is intentionally small:
+Version 0.2 is still intentionally small:
 
 - read the headset battery directly;
 - show whether the private control channel is reachable;
@@ -10,6 +10,9 @@ The first milestone is intentionally small:
 - turn noise control off;
 - expose the same controls through a home-screen widget;
 - provide a Quick Settings tile that cycles **ANC → Transparency → Off**.
+- associate the headset as an Android companion device;
+- detect Bluetooth connect/disconnect events without keeping the app open;
+- show a live, low-priority battery/ANC notification with **ANC**, **Hear**, and **Off** actions.
 
 Everything happens locally. There is no account, analytics SDK, cloud backend, root requirement, or Shizuku requirement.
 
@@ -25,6 +28,8 @@ Requirements:
 - a MOMENTUM 4 already paired in Android's Bluetooth settings.
 
 Open the project in Android Studio, allow Gradle sync to finish, and run the `app` configuration. The app supports Android 8.0 (API 26) and later; Android 12 and later ask for the Nearby devices permission at runtime.
+
+Automatic connection watching requires Android 12 or later. Open **Android integration** in the app and approve Android's one-time companion-device confirmation. Android 13 and later also ask for notification permission so the live headphone controls can be shown.
 
 Command-line builds use the included wrapper:
 
@@ -47,6 +52,7 @@ The service UUID, framing, and feature command identifiers are documented in [do
 - The control protocol is private and may change with headset firmware.
 - A widget or tile cannot request Bluetooth permission. Launch the main app once after installation.
 - Android may stop a background widget action if the OEM applies unusually strict background limits.
+- Companion-device association improves lifecycle integration but does not turn the headset into a Google Fast Pair accessory. Fast Pair requires manufacturer firmware, Google model registration, anti-spoofing keys, and certification.
 - The app does not scan, pair, update firmware, manage multipoint peers, or edit EQ yet.
 
 If the control channel cannot open, close the official Smart Control app and retry; two apps may compete for the same RFCOMM service.

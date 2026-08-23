@@ -15,8 +15,8 @@ class MomentumWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         super.onUpdate(context, manager, ids)
         val repository = MomentumRepository.get(context)
-        update(context, repository.cachedState())
-        repository.refresh { update(context, it) }
+        updateAll(context, repository.cachedState())
+        repository.refresh { updateAll(context, it) }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -25,7 +25,7 @@ class MomentumWidgetProvider : AppWidgetProvider() {
         val pendingResult = goAsync()
         val repository = MomentumRepository.get(context)
         val callback: (HeadphoneState) -> Unit = {
-            update(context, it)
+            updateAll(context, it)
             pendingResult.finish()
         }
         when (intent.action) {
@@ -36,9 +36,12 @@ class MomentumWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    private fun update(context: Context, state: HeadphoneState) {
+    private fun render(context: Context, state: HeadphoneState) {
         val views = RemoteViews(context.packageName, R.layout.momentum_widget).apply {
-            setTextViewText(R.id.widget_mode, state.error ?: state.noiseMode.displayName)
+            setTextViewText(
+                R.id.widget_mode,
+                state.error ?: if (state.reachable) state.noiseMode.displayName else "Disconnected",
+            )
             setTextViewText(R.id.widget_battery, state.batteryPercent?.let { "$it%" } ?: "—%")
             setOnClickPendingIntent(R.id.widget_anc, actionIntent(context, ACTION_ANC, 1))
             setOnClickPendingIntent(R.id.widget_transparency, actionIntent(context, ACTION_TRANSPARENCY, 2))
@@ -65,5 +68,9 @@ class MomentumWidgetProvider : AppWidgetProvider() {
         private const val ACTION_OFF = "org.openmomentum.app.action.OFF"
         private const val ACTION_REFRESH = "org.openmomentum.app.action.REFRESH"
         private val ACTIONS = setOf(ACTION_ANC, ACTION_TRANSPARENCY, ACTION_OFF, ACTION_REFRESH)
+
+        fun updateAll(context: Context, state: HeadphoneState) {
+            MomentumWidgetProvider().render(context.applicationContext, state)
+        }
     }
 }

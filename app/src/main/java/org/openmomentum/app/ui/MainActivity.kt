@@ -2,6 +2,8 @@ package org.openmomentum.app.ui
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
@@ -15,30 +17,39 @@ import android.widget.Space
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.ScrollView
+import org.openmomentum.app.companion.MomentumCompanionManager
 import org.openmomentum.app.model.HeadphoneState
 import org.openmomentum.app.repository.MomentumRepository
 
 class MainActivity : Activity() {
     private lateinit var repository: MomentumRepository
+    private lateinit var companionManager: MomentumCompanionManager
     private lateinit var statusText: TextView
     private lateinit var batteryText: TextView
     private lateinit var modeText: TextView
     private lateinit var levelText: TextView
     private lateinit var slider: SeekBar
     private lateinit var refreshButton: Button
+    private lateinit var integrationStatusText: TextView
+    private lateinit var integrationButton: Button
+    private var enableAfterNotificationPermission = false
     private val controlButtons = mutableListOf<Button>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repository = MomentumRepository.get(this)
+        companionManager = MomentumCompanionManager(this)
         setContentView(buildContent())
         render(repository.cachedState())
+        updateIntegrationStatus()
         ensurePermissionAndRefresh()
     }
 
     override fun onResume() {
         super.onResume()
         if (hasBluetoothPermission()) refresh()
+        companionManager.startObserving()
+        updateIntegrationStatus()
     }
 
     private fun buildContent(): View {
@@ -109,8 +120,24 @@ class MainActivity : Activity() {
         })
 
         root.addView(Space(this), LinearLayout.LayoutParams(1, dp(24)))
+        root.addView(text("ANDROID INTEGRATION", 12f, Color.rgb(103, 80, 164), true))
+        integrationStatusText = text("Checking…", 15f, Color.rgb(73, 69, 79)).apply {
+            setPadding(0, dp(4), 0, dp(8))
+        }
+        root.addView(integrationStatusText)
+        integrationButton = Button(this).apply {
+            text = "Enable automatic integration"
+            isAllCaps = false
+            setOnClickListener { enableAndroidIntegration() }
+        }
+        root.addView(
+            integrationButton,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)),
+        )
+
+        root.addView(Space(this), LinearLayout.LayoutParams(1, dp(24)))
         root.addView(text(
-            "Pair the headphones in Android settings first. The app talks directly to them over Bluetooth; it uses no account, cloud service, root, or Shizuku.",
+            "Pair the headphones in Android settings first. Android integration adds automatic connection detection and a live battery/ANC notification after one system confirmation. The app still uses no account, cloud service, root, or Shizuku.",
             14f,
             Color.rgb(73, 69, 79),
         ))
@@ -128,10 +155,96 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_BLUETOOTH && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+        when (requestCode) {
+            REQUEST_BLUETOOTH -> {
+                if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                    refresh()
+                    updateIntegrationStatus()
+                } else {
+                    Toast.makeText(this, "Nearby devices permission is needed to control the headphones", Toast.LENGTH_LONG).show()
+                }
+            }
+            REQUEST_NOTIFICATIONS -> {
+                if (enableAfterNotificationPermission) {
+                    enableAfterNotificationPermission = false
+                    beginAssociation()
+                }
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_ASSOCIATION) return
+        integrationButton.isEnabled = true
+        if (resultCode == RESULT_OK && companionManager.captureAssociationFromSystem()) {
+            Toast.makeText(this, "Android integration enabled", Toast.LENGTH_SHORT).show()
             refresh()
-        } else if (requestCode == REQUEST_BLUETOOTH) {
-            Toast.makeText(this, "Nearby devices permission is needed to control the headphones", Toast.LENGTH_LONG).show()
+        } else if (resultCode != RESULT_OK) {
+            Toast.makeText(this, "Headphone association was not completed", Toast.LENGTH_LONG).show()
+        }
+        updateIntegrationStatus()
+    }
+
+    private fun enableAndroidIntegration() {
+        val status = companionManager.status()
+        if (!status.supported) {
+            Toast.makeText(this, status.message, Toast.LENGTH_LONG).show()
+            return
+        }
+        if (status.associated) {
+            val observing = companionManager.startObserving()
+            Toast.makeText(
+                this,
+                if (observing) "Automatic connection watching is enabled" else "Could not restart connection watching",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            enableAfterNotificationPermission = true
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+        } else {
+            beginAssociation()
+        }
+    }
+
+    private fun beginAssociation() {
+        integrationButton.isEnabled = false
+        integrationStatusText.text = "Waiting for Android…"
+        companionManager.associate(
+            onApprovalRequired = { sender ->
+                try {
+                    startIntentSenderForResult(sender, REQUEST_ASSOCIATION, null, 0, 0, 0)
+                } catch (error: IntentSender.SendIntentException) {
+                    integrationButton.isEnabled = true
+                    integrationStatusText.text = error.message ?: "Could not open the system confirmation"
+                }
+            },
+            onCreated = {
+                integrationButton.isEnabled = true
+                updateIntegrationStatus()
+                Toast.makeText(this, "Android integration enabled", Toast.LENGTH_SHORT).show()
+                refresh()
+            },
+            onFailure = { message ->
+                integrationButton.isEnabled = true
+                updateIntegrationStatus()
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            },
+        )
+    }
+
+    private fun updateIntegrationStatus() {
+        val status = companionManager.status()
+        integrationStatusText.text = status.message
+        integrationButton.isEnabled = status.supported
+        integrationButton.text = if (status.associated) {
+            "Re-enable connection watching"
+        } else {
+            "Enable automatic integration"
         }
     }
 
@@ -204,5 +317,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_BLUETOOTH = 1001
+        private const val REQUEST_NOTIFICATIONS = 1002
+        private const val REQUEST_ASSOCIATION = 1003
     }
 }
